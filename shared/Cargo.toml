@@ -1,0 +1,11 @@
+[package]
+name = "shared"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true}
+thiserror = "2.0.17"
+
+# You can also depend on workspace dependencies
+tokio = { workspace = true }

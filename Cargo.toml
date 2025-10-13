@@ -1,0 +1,8 @@
+[workspace]
+members = ["shared"]
+
+resolver = "2"
+
+[workspace.dependencies]
+tokio = { version = "1.47.1", features = ["full"]}
+serde = { version = "1.0.228", features = ["derive"]}
