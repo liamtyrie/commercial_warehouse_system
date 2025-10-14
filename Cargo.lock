@@ -18,6 +18,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "api-gateway-service"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tokio",
+]
+
+[[package]]
+name = "authentication-service"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tokio",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.76"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -49,6 +65,14 @@ name = "cfg-if"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fd1289c04a9ea8cb22300a459a72a385d7c73d3259e2ed7dcb2af674838cfa9"
+
+[[package]]
+name = "fulfillment-service"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tokio",
+]
 
 [[package]]
 name = "gimli"
@@ -83,6 +107,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "logging-service"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tokio",
+]
+
+[[package]]
 name = "memchr"
 version = "2.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -106,6 +138,14 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "notifications-service"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tokio",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 [workspace]
-members = ["shared"]
+members = ["shared", "api-gateway-service", "authentication-service", "fulfillment-service", "logging-service", "notifications-service"]
 
 resolver = "2"
 

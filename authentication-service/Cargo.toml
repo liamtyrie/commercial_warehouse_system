@@ -1,10 +1,10 @@
 [package]
-name = "shared"
+name = "authentication-service"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-thiserror = "2.0.17"
+# Crate Dependencies
 
 # Workspace Dependencies
 serde = { workspace = true}
