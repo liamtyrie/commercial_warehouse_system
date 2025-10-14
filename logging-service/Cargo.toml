@@ -8,4 +8,5 @@ edition = "2021"
 
 # Workspace Dependencies
 serde = { workspace = true}
+serde_json = { workspace = true}
 tokio = { workspace = true }
