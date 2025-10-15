@@ -1,7 +1,7 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub enum LogLevel {
     TRACE,
     DEBUG,
@@ -10,7 +10,7 @@ pub enum LogLevel {
     ERROR
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct LogEvent {
     pub level: LogLevel,
     pub msg: String,
