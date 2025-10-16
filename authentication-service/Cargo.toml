@@ -5,7 +5,9 @@ edition = "2021"
 
 [dependencies]
 # Crate Dependencies
-
+pwhash = "1.0.0"
+jsonwebtoken = "8"
 # Workspace Dependencies
 serde = { workspace = true}
 tokio = { workspace = true }
+chrono = { workspace = true}
