@@ -11,8 +11,48 @@ pub fn should_alert(log: &LogEvent) -> bool {
     log.level == LogLevel::ERROR
 }
 
+pub fn enrich_event(event: &mut LogEvent, timestamp: &str) {
+    event.extra_fields.insert(
+        "processed_at".to_string(),
+        serde_json::Value::String(timestamp.to_string()),
+    );
+}
+
+const SENSITIVE_KEYS: &[&str] = &["password", "employee_id", "user_token", "api_key"];
+fn scrub_value_recursive(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, val) in map.iter_mut() {
+                if SENSITIVE_KEYS.iter().any(|&k| k.eq_ignore_ascii_case(key)) {
+                    *val = serde_json::json!("[REDACTED]");
+                } else {
+                    scrub_value_recursive(val);
+                }
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for v in arr.iter_mut() {
+                scrub_value_recursive(v);
+            }
+        }
+        _ => {}
+    }
+}
+
+pub fn scrub_pii(event: &mut LogEvent) {
+    for (key, value) in event.extra_fields.iter_mut() {
+        if SENSITIVE_KEYS.iter().any(|&k| k.eq_ignore_ascii_case(key)) {
+            *value = serde_json::json!("[REDACTED]");
+        } else {
+            scrub_value_recursive(value)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::log_event::{LogEvent, LogLevel};
 
@@ -79,5 +119,68 @@ mod tests {
 
         assert!(should_alert(&error_log));
         assert!(!should_alert(&info_log));
+    }
+
+    #[test]
+    fn should_add_processed_at_a_timestamp_to_event() {
+        let timestamp = "2025-10-16T15:44:00Z";
+
+        let mut event = LogEvent {
+            level: LogLevel::INFO,
+            msg: "User logged in".to_string(),
+            target: "auth_service::login".to_string(),
+            timestamp: "2025-10-16T15:43:00Z".to_string(),
+            service_name: "auth-service".to_string(),
+            extra_fields: HashMap::new(),
+        };
+
+        enrich_event(&mut event, timestamp);
+
+        assert!(event.extra_fields.contains_key("processed_at"));
+        assert_eq!(
+            event.extra_fields.get("processed_at").unwrap(),
+            &serde_json::json!(timestamp)
+        );
+    }
+
+    #[test]
+    fn should_scrub_sensitive_fields_by_key() {
+        let mut event = LogEvent {
+            level: LogLevel::WARN,
+            msg: "Failed login attempt for employee".to_string(),
+            target: "auth_service::login".to_string(),
+            timestamp: "2025-10-16T18:00:00Z".to_string(),
+            service_name: "auth-service".to_string(),
+            extra_fields: [
+                ("employee_id".to_string(), serde_json::json!("AMZ-1138")),
+                ("ip_address".to_string(), serde_json::json!("10.20.1.103")),
+                (
+                    "login_details".to_string(),
+                    serde_json::json!({
+                        "user_agent": "AMZ-Terminal/1.2",
+                        "credentials": {
+                            "password": "12345qwerty!"
+                        }
+                    }),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        };
+
+        scrub_pii(&mut event);
+
+        assert_eq!(
+            event.extra_fields.get("employee_id").unwrap(),
+            &serde_json::json!("[REDACTED]")
+        );
+
+        assert_eq!(
+            event.extra_fields.get("ip_address").unwrap(),
+            &serde_json::json!("10.20.1.103")
+        );
+
+        let nested_password = &event.extra_fields["login_details"]["credentials"]["password"];
+        assert_eq!(nested_password, &serde_json::json!("[REDACTED]"));
     }
 }
