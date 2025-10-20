@@ -1,5 +1,3 @@
-use chrono::Utc;
-
 #[derive(Debug, PartialEq)]
 pub struct StockReceivedEvent {
     pub product_id: String,
