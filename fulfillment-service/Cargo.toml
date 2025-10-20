@@ -9,3 +9,4 @@ edition = "2021"
 # Workspace Dependencies
 serde = { workspace = true}
 tokio = { workspace = true }
+chrono = { workspace = true}
