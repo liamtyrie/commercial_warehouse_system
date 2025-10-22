@@ -664,6 +664,7 @@ dependencies = [
  "fluvio",
  "futures",
  "futures-util",
+ "logging-service",
  "serde",
  "serde_json",
  "thiserror",
