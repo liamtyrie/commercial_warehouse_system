@@ -8,4 +8,11 @@ edition = "2021"
 
 # Workspace Dependencies
 serde = { workspace = true}
+serde_json = { workspace = true }
+chrono = { workspace = true }
 tokio = { workspace = true }
+fluvio = { workspace = true}
+futures-util = { workspace = true}
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+futures = { workspace = true }
