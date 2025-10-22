@@ -2,7 +2,9 @@ use fluvio::consumer::ConsumerConfigExtBuilder;
 use fluvio::{Fluvio, Offset, RecordKey};
 
 use futures::StreamExt;
+#[allow(unused_imports)]
 use std::time::Duration;
+#[allow(unused_imports)]
 use tokio::time::timeout;
 
 
