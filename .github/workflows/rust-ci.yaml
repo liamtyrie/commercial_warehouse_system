@@ -39,10 +39,6 @@ jobs:
           fluvio cluster start --local
           fluvio version
 
-      # Create test topic
-      - name: Create test topic
-        run: |
-          fluvio topic create test-topic --partitions 1 --replication 1 || true
 
       - name: Run Clippy Linter
         run: cargo clippy --workspace --all-targets -- -D warnings
@@ -57,4 +53,4 @@ jobs:
       - name: Cleanup Fluvio
         if: always()
         run: |
-          fluvio cluster delete --local || true
+          fluvio cluster delete || true
