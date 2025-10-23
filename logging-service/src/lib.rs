@@ -1,4 +1,5 @@
 pub mod log_event;
+use std::collections::HashMap;
 use log_event::LogEvent;
 
 use crate::log_event::LogLevel;
@@ -47,6 +48,71 @@ pub fn scrub_pii(event: &mut LogEvent) {
             scrub_value_recursive(value)
         }
     }
+}
+
+pub fn log_info(service_name: &str, target: &str, message: &str, extra_fields: Option<HashMap<String, serde_json::Value>>) {
+    emit_log(
+        LogLevel::INFO,
+        service_name,
+        target,
+        message,
+        extra_fields,
+    );
+}
+
+pub fn log_warn(service_name: &str, target: &str, message: &str, extra_fields: Option<HashMap<String, serde_json::Value>>) {
+    emit_log(
+        LogLevel::WARN,
+        service_name,
+        target,
+        message,
+        extra_fields,
+    );
+}
+
+pub fn log_error(service_name: &str, target: &str, message: &str, extra_fields: Option<HashMap<String, serde_json::Value>>) {
+    emit_log(
+        LogLevel::ERROR,
+        service_name,
+        target,
+        message,
+        extra_fields,
+    );
+}
+
+pub fn log_trace(service_name: &str, target: &str, message: &str, extra_fields: Option<HashMap<String, serde_json::Value>>) {
+    emit_log(
+        LogLevel::TRACE,
+        service_name,
+        target,
+        message,
+        extra_fields,
+    );
+}  
+
+fn emit_log(
+    level: LogLevel,
+    service_name: &str,
+    target: &str,
+    message: &str,
+    extra_fields: Option<HashMap<String, serde_json::Value>>,
+) {
+    let log_event = LogEvent {
+        level,
+        msg: message.to_string(),
+        target: target.to_string(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        service_name: service_name.to_string(),
+        extra_fields: extra_fields.unwrap_or_default(), 
+    };
+
+    let log_json = serde_json::to_string(&log_event).unwrap_or_else(|_| "Failed to serialize log".to_string());
+
+    if matches!(log_event.level, LogLevel::ERROR) {
+        eprintln!("{}", log_json);
+    } else {
+        println!("{}", log_json);
+    }   
 }
 
 #[cfg(test)]

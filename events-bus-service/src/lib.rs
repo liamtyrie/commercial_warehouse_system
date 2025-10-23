@@ -6,9 +6,10 @@ use futures::StreamExt;
 use std::time::Duration;
 #[allow(unused_imports)]
 use tokio::time::timeout;
-
-use logging_service::log_event::{LogEvent, LogLevel};
+use logging_service;
 use std::collections::HashMap;
+
+const SERVICE_NAME: &str = "events-bus-service";
 
 // Produce a single key-value record to the given topic.
 pub async fn produce_message(
@@ -16,17 +17,41 @@ pub async fn produce_message(
     key: impl Into<RecordKey>,
     value: &str,
 ) -> anyhow::Result<()> {
-    log_info("produce_message", "Starting message production", topic);
+    let mut extra = HashMap::new();
+    extra.insert("topic".to_string(), serde_json::json!(topic));
+
+    logging_service::log_info(
+        SERVICE_NAME,
+        "produce_message",
+        "Starting message production",
+        Some(extra),
+    );
+
     let producer = fluvio::producer(topic).await?;
     producer.send(key, value).await?;
     producer.flush().await?;
 
-    log_info("produce_message", "Message produced successfully", topic);
+    let mut extra = HashMap::new();
+    extra.insert("topic".to_string(), serde_json::json!(topic));
+    logging_service::log_info(
+        SERVICE_NAME,
+        "produce_message",
+        "Message produced successfully",
+        Some(extra),
+    );
+
     Ok(())
 }
 
 pub async fn consume_until_value(topic: &str, target_value: &str) -> anyhow::Result<()> {
-    log_info("consume_until_value", "Starting consumption", topic);
+    let mut extra = HashMap::new();
+    extra.insert("topic".to_string(), serde_json::json!(topic));
+    logging_service::log_info(
+        SERVICE_NAME,
+        "consume_until_value",
+        "Starting message consumption",
+        Some(extra),
+    );
 
     let fluvio = Fluvio::connect().await?;
 
@@ -43,10 +68,27 @@ pub async fn consume_until_value(topic: &str, target_value: &str) -> anyhow::Res
     while let Some(Ok(record)) = stream.next().await {
         let key = record.get_key().map(|k| k.as_utf8_lossy_string());
         let value = record.get_value().as_utf8_lossy_string();
-        log_debug("consume_until_value", &format!("Got record: key={:?}, value={}", key, value), topic);
+
+        let mut extra = HashMap::new();
+        extra.insert("topic".to_string(), serde_json::json!(topic));
+        extra.insert("key".to_string(), serde_json::json!(key));
+        extra.insert("value".to_string(), serde_json::json!(value.clone()));
+        logging_service::log_info(
+            SERVICE_NAME,
+            "consume_until_value",
+            "Got record",
+            Some(extra),
+        );
 
         if value == target_value {
-            log_info("consume_until_value", "Found target value", topic);
+            let mut extra = HashMap::new();
+            extra.insert("topic".to_string(), serde_json::json!(topic));
+            logging_service::log_info(
+                SERVICE_NAME,
+                "consume_until_value",
+                "Target value consumed successfully",
+                Some(extra),
+            );
             return Ok(());
         }
     }
@@ -59,60 +101,47 @@ pub async fn ensure_topic_exists(
     partitions: u32,
     replication: u32,
 ) -> anyhow::Result<()> {
-    log_info("ensure_topic_exists", &format!("Ensuring topic exists: partitions={partitions}, replication={replication}"), topic);
+    let mut extra = HashMap::new();
+    extra.insert("topic".to_string(), serde_json::json!(topic));
+    extra.insert("partitions".to_string(), serde_json::json!(partitions));
+    extra.insert("replication".to_string(), serde_json::json!(replication));
+    logging_service::log_info(
+        SERVICE_NAME,
+        "ensure_topic_exists",
+        "Ensuring topic exists",
+        Some(extra),
+    );
+
     let fluvio = Fluvio::connect().await?;
     let admin = fluvio.admin().await;
 
     let topic_spec =
         fluvio::metadata::topic::TopicSpec::new_computed(partitions, replication, None);
     match admin.create(topic.to_string(), false, topic_spec).await {
-        Ok(_) => log_info("ensure_topic_exists", "Topic created successfully", topic),
+        Ok(_) => {
+            let mut extra = HashMap::new();
+            extra.insert("topic".to_string(), serde_json::json!(topic));
+            logging_service::log_info(
+                SERVICE_NAME,
+                "ensure_topic_exists",
+                "Topic created successfully",
+                Some(extra),
+            );
+        },
         Err(e) => {
-            log_warn("ensure_topic_exists", &format!("Failed to create topic: {e}"), topic);
+           let mut extra = HashMap::new();
+           extra.insert("topic".to_string(), serde_json::json!(topic));
+           extra.insert("error".to_string(), serde_json::json!(e.to_string()));
+           logging_service::log_info(
+               SERVICE_NAME,
+               "ensure_topic_exists",
+               "Topic creation failed, it may already exist",
+               Some(extra),
+           );
         }
     }
 
     Ok(())
-}
-
-fn log_info(target: &str, message: &str, topic: &str) {
-    emit_log(LogLevel::INFO, target, message, topic);
-}
-
-fn log_debug(target: &str, message: &str, topic: &str) {
-    emit_log(LogLevel::DEBUG, target, message, topic);
-}
-
-fn log_warn(target: &str, message: &str, topic: &str) {
-    emit_log(LogLevel::WARN, target, message, topic);
-}
-
-#[allow(dead_code)]
-fn log_error(target: &str, message: &str, topic: &str) {
-    emit_log(LogLevel::ERROR, target, message, topic);
-}
-
-fn emit_log(level: LogLevel, target: &str, message: &str, topic: &str) {
-    let mut extra_fields = HashMap::new();
-    extra_fields.insert("topic".to_string(), serde_json::json!(topic));
-    
-    let log_event = LogEvent {
-        level,
-        msg: message.to_string(),
-        target: target.to_string(),
-        timestamp: chrono::Utc::now().to_rfc3339(),
-        service_name: "events-bus-service".to_string(),
-        extra_fields,
-    };
-    
-    let log_json = serde_json::to_string(&log_event).unwrap_or_else(|_| "Failed to serialize log".to_string());
-    
-    // Use stderr for ERROR level, stdout for everything else
-    if matches!(log_event.level, LogLevel::ERROR) {
-        eprintln!("{}", log_json);
-    } else {
-        println!("{}", log_json);
-    }
 }
 
 #[cfg(test)]
@@ -123,16 +152,25 @@ mod tests {
     const TIMEOUT_MS: u64 = 5000;
 
     #[tokio::test]
-    async fn test_produce_consume() -> Result<(), Box<dyn std::error::Error>> {
-        if let Err(e) = run_test().await {
-            eprintln!("Test failed: {e}");
-            return Err(e.into());
-        }
-        Ok(())
-    }
-    async fn run_test() -> anyhow::Result<()> {
+    async fn test_produce_consume() -> anyhow::Result<()> {
+        let mut extra = HashMap::new();
+        extra.insert("topic".to_string(), serde_json::json!(TEST_TOPIC));  
+        logging_service::log_info(
+            SERVICE_NAME,
+            "test_produce_consume",
+            "Starting produce-consume test",
+            Some(extra),
+        );
         if let Err(e) = ensure_topic_exists(TEST_TOPIC, 1, 1).await {
-            eprintln!("Failed to ensure topic exists: {e}");
+            let mut extra = HashMap::new(); 
+            extra.insert("topic".to_string(), serde_json::json!(TEST_TOPIC));
+            extra.insert("error".to_string(), serde_json::json!(e.to_string()));
+            logging_service::log_info(
+                SERVICE_NAME,
+                "test_produce_consume",
+                "Produce-consume test failed",
+                Some(extra),
+            );  
             return Err(e);
         }
 
@@ -142,45 +180,94 @@ mod tests {
         let produce_handle = tokio::spawn(produce_message(TEST_TOPIC, key, value));
         let consume_handle = tokio::spawn(consume_until_value(TEST_TOPIC, value));
 
-        let result = timeout(Duration::from_millis(TIMEOUT_MS), async {
-            let produce_result = produce_handle.await;
-            let consume_result = consume_handle.await;
-            (produce_result, consume_result)
-        })
-        .await;
+        let result = timeout(
+            Duration::from_millis(TIMEOUT_MS),
+            async {
+                let produce_result = produce_handle.await;
+                let consume_result = consume_handle.await;
+                (produce_result, consume_result)
+            },  
+        ).await;
 
         match result {
             Ok((produce_result, consume_result)) => {
                 let produce_outcome = match produce_result {
                     Ok(res) => res,
                     Err(e) => {
-                        eprintln!("Produce task panicked: {e}");
-                        return Err(anyhow::anyhow!("Product task panicked: {e}"));
+                        let mut extra = HashMap::new();
+                        extra.insert("topic".to_string(), serde_json::json!(TEST_TOPIC));
+                        extra.insert("error".to_string(), serde_json::json!(e.to_string()));
+                        logging_service::log_error(
+                            SERVICE_NAME,
+                            "test_produce_consume",
+                            "Produce task panicked",
+                            Some(extra),
+                        );  
+                        return Err(anyhow::anyhow!("Produce task panicked: {e}"));
                     }
                 };
-
                 let consume_outcome = match consume_result {
                     Ok(res) => res,
                     Err(e) => {
-                        eprintln!("Consume task panicked: {e}");
+                        let mut extra = HashMap::new();
+                        extra.insert("topic".to_string(), serde_json::json!(TEST_TOPIC));
+                        extra.insert("error".to_string(), serde_json::json!(e.to_string()));
+                        logging_service::log_error(
+                            SERVICE_NAME,
+                            "test_produce_consume",
+                            "Consume task panicked",
+                            Some(extra),
+                        );  
                         return Err(anyhow::anyhow!("Consume task panicked: {e}"));
                     }
                 };
 
                 if let Err(e) = produce_outcome {
-                    eprintln!("Produce failed: {e}");
+                    let mut extra = HashMap::new();
+                    extra.insert("topic".to_string(), serde_json::json!(TEST_TOPIC));
+                    extra.insert("error".to_string(), serde_json::json!(e.to_string()));
+                    logging_service::log_error(
+                        SERVICE_NAME,
+                        "test_produce_consume",
+                        "Produce failed",
+                        Some(extra),
+                    );  
                     return Err(e);
                 }
 
                 if let Err(e) = consume_outcome {
-                    eprintln!("Consume failed: {e}");
+                    let mut extra = HashMap::new();
+                    extra.insert("topic".to_string(), serde_json::json!(TEST_TOPIC));
+                    extra.insert("error".to_string(), serde_json::json!(e.to_string()));
+                    logging_service::log_error(
+                        SERVICE_NAME,
+                        "test_produce_consume",
+                        "Consume failed",
+                        Some(extra),
+                    );  
                     return Err(e);
                 }
 
+                let mut extra = HashMap::new();
+                extra.insert("topic".to_string(), serde_json::json!(TEST_TOPIC));
+                logging_service::log_info(
+                    SERVICE_NAME,
+                    "test_produce_consume",
+                    "Produce-consume test succeeded",
+                    Some(extra),
+                );
                 Ok(())
             }
             Err(_) => {
-                eprintln!("Test timed out after {TIMEOUT_MS}ms");
+                let mut extra = HashMap::new();
+                extra.insert("topic".to_string(), serde_json::json!(TEST_TOPIC));
+                extra.insert("timeout_ms".to_string(), serde_json::json!(TIMEOUT_MS));
+                logging_service::log_error(
+                    SERVICE_NAME,
+                    "test_produce_consume",
+                    "Test timed out",
+                    Some(extra),
+                );  
                 Err(anyhow::anyhow!("Test timed out after {TIMEOUT_MS}ms"))
             }
         }
