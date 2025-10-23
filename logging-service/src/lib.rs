@@ -19,6 +19,64 @@ pub fn enrich_event(event: &mut LogEvent, timestamp: &str) {
     );
 }
 
+
+#[macro_export]
+macro_rules! log {
+    (INFO, $service:expr, $target:expr, $msg:expr) => {
+        $crate::log_info($service, $target, $msg, None)
+    };
+    (INFO, $service:expr, $target:expr, $msg:expr, $($key:expr => $value:expr),+ $(,)?) => {{
+        let mut extra = std::collections::HashMap::new();
+        $(
+            extra.insert($key.to_string(), serde_json::json!($value));
+        )+
+        $crate::log_info($service, $target, $msg, Some(extra))
+    }};
+    (DEBUG, $service:expr, $target:expr, $msg:expr) => {
+        $crate::log_debug($service, $target, $msg, None)
+    };
+    (DEBUG, $service:expr, $target:expr, $msg:expr, $($key:expr => $value:expr),+ $(,)?) => {{
+        let mut extra = std::collections::HashMap::new();
+        $(
+            extra.insert($key.to_string(), serde_json::json!($value));
+        )+
+        $crate::log_debug($service, $target, $msg, Some(extra))
+    }};
+    
+    (WARN, $service:expr, $target:expr, $msg:expr) => {
+        $crate::log_warn($service, $target, $msg, None)
+    };
+    (WARN, $service:expr, $target:expr, $msg:expr, $($key:expr => $value:expr),+ $(,)?) => {{
+        let mut extra = std::collections::HashMap::new();
+        $(
+            extra.insert($key.to_string(), serde_json::json!($value));
+        )+
+        $crate::log_warn($service, $target, $msg, Some(extra))
+    }};
+    
+    (ERROR, $service:expr, $target:expr, $msg:expr) => {
+        $crate::log_error($service, $target, $msg, None)
+    };
+    (ERROR, $service:expr, $target:expr, $msg:expr, $($key:expr => $value:expr),+ $(,)?) => {{
+        let mut extra = std::collections::HashMap::new();
+        $(
+            extra.insert($key.to_string(), serde_json::json!($value));
+        )+
+        $crate::log_error($service, $target, $msg, Some(extra))
+    }};
+    
+    (TRACE, $service:expr, $target:expr, $msg:expr) => {
+        $crate::log_trace($service, $target, $msg, None)
+    };
+    (TRACE, $service:expr, $target:expr, $msg:expr, $($key:expr => $value:expr),+ $(,)?) => {{
+        let mut extra = std::collections::HashMap::new();
+        $(
+            extra.insert($key.to_string(), serde_json::json!($value));
+        )+
+        $crate::log_trace($service, $target, $msg, Some(extra))
+    }};
+}
+
 const SENSITIVE_KEYS: &[&str] = &["password", "employee_id", "user_token", "api_key"];
 fn scrub_value_recursive(value: &mut serde_json::Value) {
     match value {

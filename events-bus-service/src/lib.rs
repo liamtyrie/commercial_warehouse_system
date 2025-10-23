@@ -2,6 +2,7 @@ use fluvio::consumer::ConsumerConfigExtBuilder;
 use fluvio::{Fluvio, Offset, RecordKey};
 
 use futures::StreamExt;
+use logging_service::log;
 #[allow(unused_imports)]
 use std::time::Duration;
 #[allow(unused_imports)]
@@ -9,56 +10,25 @@ use tokio::time::timeout;
 
 const SERVICE_NAME: &str = "events-bus-service";
 
-// Small helper macro to build the `extra` metadata map used for logging.
-// Usage: let extra = meta! { "topic" => topic, "key" => key };
-macro_rules! meta {
-    ( $( $k:expr => $v:expr ),* $(,)? ) => {{
-        let mut m: std::collections::HashMap<String, serde_json::Value> = std::collections::HashMap::new();
-        $(
-            m.insert($k.to_string(), serde_json::json!($v));
-        )*
-        m
-    }};
-}
-
 // Produce a single key-value record to the given topic.
 pub async fn produce_message(
     topic: &str,
     key: impl Into<RecordKey>,
     value: &str,
 ) -> anyhow::Result<()> {
-    let extra = meta! { "topic" => topic };
-
-    logging_service::log_info(
-        SERVICE_NAME,
-        "produce_message",
-        "Starting message production",
-        Some(extra),
-    );
+    log!(INFO, SERVICE_NAME, "produce_message", "Starting message production", "topic" => topic);
 
     let producer = fluvio::producer(topic).await?;
     producer.send(key, value).await?;
     producer.flush().await?;
 
-    let extra = meta! { "topic" => topic };
-    logging_service::log_info(
-        SERVICE_NAME,
-        "produce_message",
-        "Message produced successfully",
-        Some(extra),
-    );
+    log!(INFO, SERVICE_NAME, "produce_message", "Message produced successfully", "topic" => topic);
 
     Ok(())
 }
 
 pub async fn consume_until_value(topic: &str, target_value: &str) -> anyhow::Result<()> {
-    let extra = meta! { "topic" => topic };
-    logging_service::log_info(
-        SERVICE_NAME,
-        "consume_until_value",
-        "Starting message consumption",
-        Some(extra),
-    );
+    log!(INFO, SERVICE_NAME, "consume_until_value", "Starting to consume messages", "topic" => topic);
 
     let fluvio = Fluvio::connect().await?;
 
@@ -76,22 +46,10 @@ pub async fn consume_until_value(topic: &str, target_value: &str) -> anyhow::Res
         let key = record.get_key().map(|k| k.as_utf8_lossy_string());
         let value = record.get_value().as_utf8_lossy_string();
 
-        let extra = meta! { "topic" => topic, "key" => key, "value" => value.clone() };
-        logging_service::log_info(
-            SERVICE_NAME,
-            "consume_until_value",
-            "Got record",
-            Some(extra),
-        );
+        log!(INFO, SERVICE_NAME, "consume_until_value", "Consumed message", "topic" => topic, "key" => key, "value" => value.clone());
 
         if value == target_value {
-            let extra = meta! { "topic" => topic };
-            logging_service::log_info(
-                SERVICE_NAME,
-                "consume_until_value",
-                "Target value consumed successfully",
-                Some(extra),
-            );
+            log!(INFO, SERVICE_NAME, "consume_until_value", "Target value found, stopping consumption", "topic" => topic);
             return Ok(());
         }
     }
@@ -104,14 +62,7 @@ pub async fn ensure_topic_exists(
     partitions: u32,
     replication: u32,
 ) -> anyhow::Result<()> {
-    let extra = meta! { "topic" => topic, "partitions" => partitions, "replication" => replication };
-    logging_service::log_info(
-        SERVICE_NAME,
-        "ensure_topic_exists",
-        "Ensuring topic exists",
-        Some(extra),
-    );
-
+    log!(INFO, SERVICE_NAME, "ensure_topic_exists", "Ensuring topic exists", "topic" => topic);
     let fluvio = Fluvio::connect().await?;
     let admin = fluvio.admin().await;
 
@@ -119,22 +70,10 @@ pub async fn ensure_topic_exists(
         fluvio::metadata::topic::TopicSpec::new_computed(partitions, replication, None);
     match admin.create(topic.to_string(), false, topic_spec).await {
         Ok(_) => {
-            let extra = meta! { "topic" => topic };
-            logging_service::log_info(
-                SERVICE_NAME,
-                "ensure_topic_exists",
-                "Topic created successfully",
-                Some(extra),
-            );
-        },
+           log!(INFO, SERVICE_NAME, "ensure_topic_exists", "Topic created successfully", "topic" => topic);
+        }
         Err(e) => {
-           let extra = meta! { "topic" => topic, "error" => e.to_string() };
-           logging_service::log_info(
-               SERVICE_NAME,
-               "ensure_topic_exists",
-               "Topic creation failed, it may already exist",
-               Some(extra),
-           );
+           log!(WARN, SERVICE_NAME, "ensure_topic_exists", "Topic creation failed, it may already exist", "topic" => topic, "error" => e.to_string());
         }
     }
 
@@ -150,21 +89,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_produce_consume() -> anyhow::Result<()> {
-        let extra = meta! { "topic" => TEST_TOPIC };
-        logging_service::log_info(
-            SERVICE_NAME,
-            "test_produce_consume",
-            "Starting produce-consume test",
-            Some(extra),
-        );
+       log!(INFO, SERVICE_NAME, "test_produce_consume", "Starting produce-consume test", "topic" => TEST_TOPIC);
         if let Err(e) = ensure_topic_exists(TEST_TOPIC, 1, 1).await {
-            let extra = meta! { "topic" => TEST_TOPIC, "error" => e.to_string() };
-            logging_service::log_info(
-                SERVICE_NAME,
-                "test_produce_consume",
-                "Produce-consume test failed",
-                Some(extra),
-            );  
+           log!(ERROR, SERVICE_NAME, "test_produce_consume", "Failed to ensure test topic exists", "topic" => TEST_TOPIC, "error" => e.to_string());
             return Err(e);
         }
 
@@ -174,83 +101,45 @@ mod tests {
         let produce_handle = tokio::spawn(produce_message(TEST_TOPIC, key, value));
         let consume_handle = tokio::spawn(consume_until_value(TEST_TOPIC, value));
 
-        let result = timeout(
-            Duration::from_millis(TIMEOUT_MS),
-            async {
-                let produce_result = produce_handle.await;
-                let consume_result = consume_handle.await;
-                (produce_result, consume_result)
-            },  
-        ).await;
+        let result = timeout(Duration::from_millis(TIMEOUT_MS), async {
+            let produce_result = produce_handle.await;
+            let consume_result = consume_handle.await;
+            (produce_result, consume_result)
+        })
+        .await;
 
         match result {
             Ok((produce_result, consume_result)) => {
                 let produce_outcome = match produce_result {
                     Ok(res) => res,
                     Err(e) => {
-                        let extra = meta! { "topic" => TEST_TOPIC, "error" => e.to_string() };
-                        logging_service::log_error(
-                            SERVICE_NAME,
-                            "test_produce_consume",
-                            "Produce task panicked",
-                            Some(extra),
-                        );  
+                     log!(ERROR, SERVICE_NAME, "test_produce_consume", "Produce task panicked", "topic" => TEST_TOPIC, "error" => e.to_string());
                         return Err(anyhow::anyhow!("Produce task panicked: {e}"));
                     }
                 };
                 let consume_outcome = match consume_result {
                     Ok(res) => res,
                     Err(e) => {
-                        let extra = meta! { "topic" => TEST_TOPIC, "error" => e.to_string() };
-                        logging_service::log_error(
-                            SERVICE_NAME,
-                            "test_produce_consume",
-                            "Consume task panicked",
-                            Some(extra),
-                        );  
+                        log!(ERROR, SERVICE_NAME, "test_produce_consume", "Consume task panicked", "topic" => TEST_TOPIC, "error" => e.to_string());
                         return Err(anyhow::anyhow!("Consume task panicked: {e}"));
                     }
                 };
 
                 if let Err(e) = produce_outcome {
-                    let extra = meta! { "topic" => TEST_TOPIC, "error" => e.to_string() };
-                    logging_service::log_error(
-                        SERVICE_NAME,
-                        "test_produce_consume",
-                        "Produce failed",
-                        Some(extra),
-                    );  
+                   log!(ERROR, SERVICE_NAME, "test_produce_consume", "Produce failed", "topic" => TEST_TOPIC, "error" => e.to_string());
                     return Err(e);
                 }
 
                 if let Err(e) = consume_outcome {
-                    let extra = meta! { "topic" => TEST_TOPIC, "error" => e.to_string() };
-                    logging_service::log_error(
-                        SERVICE_NAME,
-                        "test_produce_consume",
-                        "Consume failed",
-                        Some(extra),
-                    );  
+                   log!(ERROR, SERVICE_NAME, "test_produce_consume", "Consume failed", "topic" => TEST_TOPIC, "error" => e.to_string());
                     return Err(e);
                 }
 
-                let extra = meta! { "topic" => TEST_TOPIC };
-                logging_service::log_info(
-                    SERVICE_NAME,
-                    "test_produce_consume",
-                    "Produce-consume test succeeded",
-                    Some(extra),
-                );
+                log!(INFO, SERVICE_NAME, "test_produce_consume", "Produce-consume test completed successfully", "topic" => TEST_TOPIC);
                 Ok(())
             }
             Err(_) => {
-                let extra = meta! { "topic" => TEST_TOPIC, "timeout_ms" => TIMEOUT_MS };
-                logging_service::log_error(
-                    SERVICE_NAME,
-                    "test_produce_consume",
-                    "Test timed out",
-                    Some(extra),
-                );  
+              log!(ERROR, SERVICE_NAME, "test_produce_consume", "Test timed out", "topic" => TEST_TOPIC, "timeout_ms" => TIMEOUT_MS.to_string());
                 Err(anyhow::anyhow!("Test timed out after {TIMEOUT_MS}ms"))
             }
         }
