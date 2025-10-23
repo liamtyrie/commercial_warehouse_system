@@ -6,7 +6,7 @@ use futures::StreamExt;
 use std::time::Duration;
 #[allow(unused_imports)]
 use tokio::time::timeout;
-use logging_service;
+
 use std::collections::HashMap;
 
 const SERVICE_NAME: &str = "events-bus-service";
