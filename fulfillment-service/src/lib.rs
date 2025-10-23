@@ -1,7 +1,5 @@
 use shared::models::*;
 
-
-
 pub fn handle_receive_stock(command: ReceiveStockCommand) -> Result<StockReceivedEvent, FulfillmentError> {
     if command.quantity == 0 {
         return Err(FulfillmentError::InvalidQuantity)

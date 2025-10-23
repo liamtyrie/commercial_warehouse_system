@@ -1,24 +1,21 @@
 pub mod log_event;
 use std::collections::HashMap;
-use log_event::LogEvent;
+use lazy_static::lazy_static;
+use prometheus::{opts, register_int_counter_vec, IntCounterVec};
 
+use log_event::LogEvent;
 use crate::log_event::LogLevel;
 
-pub fn parse_log_line(line: &str) -> Result<LogEvent, serde_json::Error> {
-    serde_json::from_str(line)
+lazy_static! {
+    pub static ref LOG_EVENTS_TOTAL: IntCounterVec = register_int_counter_vec!(
+        opts!(
+            "log_events_total",
+            "Total number of log events processed"
+        ),
+        &["level", "service_name", "target"]
+    )
+    .expect("Failed to create LOG_EVENTS_TOTAL metric");
 }
-
-pub fn should_alert(log: &LogEvent) -> bool {
-    log.level == LogLevel::ERROR
-}
-
-pub fn enrich_event(event: &mut LogEvent, timestamp: &str) {
-    event.extra_fields.insert(
-        "processed_at".to_string(),
-        serde_json::Value::String(timestamp.to_string()),
-    );
-}
-
 
 #[macro_export]
 macro_rules! log {
@@ -76,6 +73,22 @@ macro_rules! log {
         $crate::log_trace($service, $target, $msg, Some(extra))
     }};
 }
+
+pub fn parse_log_line(line: &str) -> Result<LogEvent, serde_json::Error> {
+    serde_json::from_str(line)
+}
+
+pub fn should_alert(log: &LogEvent) -> bool {
+    log.level == LogLevel::ERROR
+}
+
+pub fn enrich_event(event: &mut LogEvent, timestamp: &str) {
+    event.extra_fields.insert(
+        "processed_at".to_string(),
+        serde_json::Value::String(timestamp.to_string()),
+    );
+}
+
 
 const SENSITIVE_KEYS: &[&str] = &["password", "employee_id", "user_token", "api_key"];
 fn scrub_value_recursive(value: &mut serde_json::Value) {
@@ -155,6 +168,7 @@ fn emit_log(
     message: &str,
     extra_fields: Option<HashMap<String, serde_json::Value>>,
 ) {
+    LOG_EVENTS_TOTAL.with_label_values(&[level.as_str(), service_name, target]).inc();
     let log_event = LogEvent {
         level,
         msg: message.to_string(),

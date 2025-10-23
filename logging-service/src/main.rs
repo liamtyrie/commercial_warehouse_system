@@ -1,7 +1,15 @@
-use std::io::{self, BufRead};
+use std::{io::{self, BufRead}, net::SocketAddr};
 use logging_service::{parse_log_line};
 
-fn main() {
+#[tokio::main]
+async fn main() {
+    // Prometheus metrics server
+    let addr: SocketAddr = "0.0.0.0:9184".parse().expect("Failed to parse address");
+    prometheus_exporter::start(addr).expect("Failed to start Prometheus exporter");
+
+    println!("Application running. Metrics available at http://{}/metrics", addr);
+
+
     let stdin = io::stdin();
     for line in stdin.lock().lines() {
         match line {

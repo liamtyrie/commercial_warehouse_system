@@ -10,6 +10,18 @@ pub enum LogLevel {
     ERROR
 }
 
+impl LogLevel {
+    pub fn as_str(&self) -> &str {
+        match self {
+            LogLevel::TRACE => "TRACE",
+            LogLevel::DEBUG => "DEBUG",
+            LogLevel::INFO => "INFO",
+            LogLevel::WARN => "WARN",
+            LogLevel::ERROR => "ERROR",
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct LogEvent {
     pub level: LogLevel,
