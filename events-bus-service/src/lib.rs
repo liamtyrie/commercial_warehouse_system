@@ -7,9 +7,19 @@ use std::time::Duration;
 #[allow(unused_imports)]
 use tokio::time::timeout;
 
-use std::collections::HashMap;
-
 const SERVICE_NAME: &str = "events-bus-service";
+
+// Small helper macro to build the `extra` metadata map used for logging.
+// Usage: let extra = meta! { "topic" => topic, "key" => key };
+macro_rules! meta {
+    ( $( $k:expr => $v:expr ),* $(,)? ) => {{
+        let mut m: std::collections::HashMap<String, serde_json::Value> = std::collections::HashMap::new();
+        $(
+            m.insert($k.to_string(), serde_json::json!($v));
+        )*
+        m
+    }};
+}
 
 // Produce a single key-value record to the given topic.
 pub async fn produce_message(
@@ -17,8 +27,7 @@ pub async fn produce_message(
     key: impl Into<RecordKey>,
     value: &str,
 ) -> anyhow::Result<()> {
-    let mut extra = HashMap::new();
-    extra.insert("topic".to_string(), serde_json::json!(topic));
+    let extra = meta! { "topic" => topic };
 
     logging_service::log_info(
         SERVICE_NAME,
@@ -31,8 +40,7 @@ pub async fn produce_message(
     producer.send(key, value).await?;
     producer.flush().await?;
 
-    let mut extra = HashMap::new();
-    extra.insert("topic".to_string(), serde_json::json!(topic));
+    let extra = meta! { "topic" => topic };
     logging_service::log_info(
         SERVICE_NAME,
         "produce_message",
@@ -44,8 +52,7 @@ pub async fn produce_message(
 }
 
 pub async fn consume_until_value(topic: &str, target_value: &str) -> anyhow::Result<()> {
-    let mut extra = HashMap::new();
-    extra.insert("topic".to_string(), serde_json::json!(topic));
+    let extra = meta! { "topic" => topic };
     logging_service::log_info(
         SERVICE_NAME,
         "consume_until_value",
@@ -69,10 +76,7 @@ pub async fn consume_until_value(topic: &str, target_value: &str) -> anyhow::Res
         let key = record.get_key().map(|k| k.as_utf8_lossy_string());
         let value = record.get_value().as_utf8_lossy_string();
 
-        let mut extra = HashMap::new();
-        extra.insert("topic".to_string(), serde_json::json!(topic));
-        extra.insert("key".to_string(), serde_json::json!(key));
-        extra.insert("value".to_string(), serde_json::json!(value.clone()));
+        let extra = meta! { "topic" => topic, "key" => key, "value" => value.clone() };
         logging_service::log_info(
             SERVICE_NAME,
             "consume_until_value",
@@ -81,8 +85,7 @@ pub async fn consume_until_value(topic: &str, target_value: &str) -> anyhow::Res
         );
 
         if value == target_value {
-            let mut extra = HashMap::new();
-            extra.insert("topic".to_string(), serde_json::json!(topic));
+            let extra = meta! { "topic" => topic };
             logging_service::log_info(
                 SERVICE_NAME,
                 "consume_until_value",
@@ -101,10 +104,7 @@ pub async fn ensure_topic_exists(
     partitions: u32,
     replication: u32,
 ) -> anyhow::Result<()> {
-    let mut extra = HashMap::new();
-    extra.insert("topic".to_string(), serde_json::json!(topic));
-    extra.insert("partitions".to_string(), serde_json::json!(partitions));
-    extra.insert("replication".to_string(), serde_json::json!(replication));
+    let extra = meta! { "topic" => topic, "partitions" => partitions, "replication" => replication };
     logging_service::log_info(
         SERVICE_NAME,
         "ensure_topic_exists",
@@ -119,8 +119,7 @@ pub async fn ensure_topic_exists(
         fluvio::metadata::topic::TopicSpec::new_computed(partitions, replication, None);
     match admin.create(topic.to_string(), false, topic_spec).await {
         Ok(_) => {
-            let mut extra = HashMap::new();
-            extra.insert("topic".to_string(), serde_json::json!(topic));
+            let extra = meta! { "topic" => topic };
             logging_service::log_info(
                 SERVICE_NAME,
                 "ensure_topic_exists",
@@ -129,9 +128,7 @@ pub async fn ensure_topic_exists(
             );
         },
         Err(e) => {
-           let mut extra = HashMap::new();
-           extra.insert("topic".to_string(), serde_json::json!(topic));
-           extra.insert("error".to_string(), serde_json::json!(e.to_string()));
+           let extra = meta! { "topic" => topic, "error" => e.to_string() };
            logging_service::log_info(
                SERVICE_NAME,
                "ensure_topic_exists",
@@ -153,8 +150,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_produce_consume() -> anyhow::Result<()> {
-        let mut extra = HashMap::new();
-        extra.insert("topic".to_string(), serde_json::json!(TEST_TOPIC));  
+        let extra = meta! { "topic" => TEST_TOPIC };
         logging_service::log_info(
             SERVICE_NAME,
             "test_produce_consume",
@@ -162,9 +158,7 @@ mod tests {
             Some(extra),
         );
         if let Err(e) = ensure_topic_exists(TEST_TOPIC, 1, 1).await {
-            let mut extra = HashMap::new(); 
-            extra.insert("topic".to_string(), serde_json::json!(TEST_TOPIC));
-            extra.insert("error".to_string(), serde_json::json!(e.to_string()));
+            let extra = meta! { "topic" => TEST_TOPIC, "error" => e.to_string() };
             logging_service::log_info(
                 SERVICE_NAME,
                 "test_produce_consume",
@@ -194,9 +188,7 @@ mod tests {
                 let produce_outcome = match produce_result {
                     Ok(res) => res,
                     Err(e) => {
-                        let mut extra = HashMap::new();
-                        extra.insert("topic".to_string(), serde_json::json!(TEST_TOPIC));
-                        extra.insert("error".to_string(), serde_json::json!(e.to_string()));
+                        let extra = meta! { "topic" => TEST_TOPIC, "error" => e.to_string() };
                         logging_service::log_error(
                             SERVICE_NAME,
                             "test_produce_consume",
@@ -209,9 +201,7 @@ mod tests {
                 let consume_outcome = match consume_result {
                     Ok(res) => res,
                     Err(e) => {
-                        let mut extra = HashMap::new();
-                        extra.insert("topic".to_string(), serde_json::json!(TEST_TOPIC));
-                        extra.insert("error".to_string(), serde_json::json!(e.to_string()));
+                        let extra = meta! { "topic" => TEST_TOPIC, "error" => e.to_string() };
                         logging_service::log_error(
                             SERVICE_NAME,
                             "test_produce_consume",
@@ -223,9 +213,7 @@ mod tests {
                 };
 
                 if let Err(e) = produce_outcome {
-                    let mut extra = HashMap::new();
-                    extra.insert("topic".to_string(), serde_json::json!(TEST_TOPIC));
-                    extra.insert("error".to_string(), serde_json::json!(e.to_string()));
+                    let extra = meta! { "topic" => TEST_TOPIC, "error" => e.to_string() };
                     logging_service::log_error(
                         SERVICE_NAME,
                         "test_produce_consume",
@@ -236,9 +224,7 @@ mod tests {
                 }
 
                 if let Err(e) = consume_outcome {
-                    let mut extra = HashMap::new();
-                    extra.insert("topic".to_string(), serde_json::json!(TEST_TOPIC));
-                    extra.insert("error".to_string(), serde_json::json!(e.to_string()));
+                    let extra = meta! { "topic" => TEST_TOPIC, "error" => e.to_string() };
                     logging_service::log_error(
                         SERVICE_NAME,
                         "test_produce_consume",
@@ -248,8 +234,7 @@ mod tests {
                     return Err(e);
                 }
 
-                let mut extra = HashMap::new();
-                extra.insert("topic".to_string(), serde_json::json!(TEST_TOPIC));
+                let extra = meta! { "topic" => TEST_TOPIC };
                 logging_service::log_info(
                     SERVICE_NAME,
                     "test_produce_consume",
@@ -259,9 +244,7 @@ mod tests {
                 Ok(())
             }
             Err(_) => {
-                let mut extra = HashMap::new();
-                extra.insert("topic".to_string(), serde_json::json!(TEST_TOPIC));
-                extra.insert("timeout_ms".to_string(), serde_json::json!(TIMEOUT_MS));
+                let extra = meta! { "topic" => TEST_TOPIC, "timeout_ms" => TIMEOUT_MS };
                 logging_service::log_error(
                     SERVICE_NAME,
                     "test_produce_consume",
