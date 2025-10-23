@@ -1,32 +1,13 @@
-#[derive(Debug, PartialEq)]
-pub struct StockReceivedEvent {
-    pub product_id: String,
-    pub quantity: u32,
-    pub warehouse_locaton: String,
-    pub received_by: String,
-    pub received_at: String,
-}
+use shared::models::*;
 
-pub struct ReceiveStockCommand {
-    pub product_id: String,
-    pub quantity: u32,
-    pub warehouse_location: String,
-    pub received_by: String,
-}
 
-#[derive(Debug, PartialEq)]
-pub enum FulfillmentError {
-    InvalidQuantity,
-    InvalidProductId,
-    InvalidWarehouseLocation,
-}
 
 pub fn handle_receive_stock(command: ReceiveStockCommand) -> Result<StockReceivedEvent, FulfillmentError> {
     if command.quantity == 0 {
         return Err(FulfillmentError::InvalidQuantity)
     }
 
-    Ok(StockReceivedEvent { product_id: command.product_id, quantity: command.quantity, warehouse_locaton: command.warehouse_location, received_by: command.received_by, received_at: chrono::Utc::now().to_rfc3339(), })
+    Ok(StockReceivedEvent { product_id: command.product_id, quantity: command.quantity, warehouse_location: command.warehouse_location, received_by: command.received_by, received_at: chrono::Utc::now().to_rfc3339(), })
 }
 
 #[cfg(test)]

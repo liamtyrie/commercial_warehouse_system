@@ -3,6 +3,8 @@
 #![allow(unused_imports)]
 #![allow(unused_mut)]
 
+pub mod models;
+
 fn main() {
     println!("Shared file");
 }
