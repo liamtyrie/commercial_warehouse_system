@@ -688,6 +688,7 @@ dependencies = [
  "futures",
  "futures-util",
  "logging-service",
+ "prometheus_exporter",
  "serde",
  "serde_json",
  "thiserror 2.0.17",

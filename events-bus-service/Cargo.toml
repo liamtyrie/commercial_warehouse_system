@@ -16,6 +16,8 @@ futures-util = { workspace = true}
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 futures = { workspace = true }
+prometheus_exporter = { workspace = true }
+
 
 # Internal Dependencies
 logging-service = { path = "../logging-service" }

@@ -7,10 +7,10 @@ edition = "2021"
 # Crate Dependencies
 prometheus = { version = "0.14", features = ["process"] }
 lazy_static = "1.4"
-prometheus_exporter = "0.8.5"
 
 # Workspace Dependencies
 serde = { workspace = true}
 serde_json = { workspace = true}
 tokio = { workspace = true }
 chrono = { workspace = true}
+prometheus_exporter = { workspace = true}
